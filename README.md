@@ -273,11 +273,29 @@ This is a view containing all of the in-app purchase options. It can be created 
 InAppPurchaseView(
     includeNavigationStack: true,
     includeDismissButton: true,
-    onPurchase onPurchaseAction: nil
+    onPurchase onPurchaseAction: nil,
+    contentOrder: InAppPurchaseViewContent.defaultOrder
 )
 ```
 
 It has options to include its own navigation stack and dismiss button which is useful for when displaying in a sheet instead of in an existing navigation stack. A separate purchase action can be added too.
+
+The order of content in the purchase view can also be customised. Supports reordering the order and adding custom SwiftUI content:
+
+```swift
+InAppPurchaseView(
+    contentOrder: [
+        .header,
+        .custom(AnyView(
+            Text("Limited-time discount")
+                .font(.headline)
+        )),
+        .tiers,
+        .features,
+        .additionalOptions
+    ]
+)
+```
 
 ### LockedInAppPurchaseFeatureButton
 

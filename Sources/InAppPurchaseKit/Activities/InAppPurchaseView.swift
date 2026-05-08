@@ -29,11 +29,8 @@ public struct InAppPurchaseView: View {
     /// is handled automatically when no action is set.
     private let onPurchaseAction: (@Sendable () -> Void)?
 
-    /// Optional custom content to insert into the view.
-    private let customContent: AnyView?
-
-    /// The insertion point for custom content, if provided.
-    private let customContentInsertionPoint: CustomContentInsertionPoint
+    /// The order that content should be displayed in the purchase view.
+    private let contentOrder: [InAppPurchaseViewContent]
     
     /// The current in-app purchase tier that has been selected in the list.
     @State private var selectedTier: PurchaseTier?
@@ -52,43 +49,18 @@ public struct InAppPurchaseView: View {
     ///   to the action set in `InAppPurchaseKitConfiguration` but both
     ///   will be performed. If an action is set, you will need to also dismiss the view. This
     ///   is handled automatically when no action is set. Defaults to `nil`.
-    public init(
-        includeNavigationStack: Bool = true,
-        includeDismissButton: Bool = true,
-        onPurchase onPurchaseAction: (@Sendable () -> Void)? = nil
-    ) {
-        self.includeNavigationStack = includeNavigationStack
-        self.includeDismissButton = includeDismissButton
-        self.onPurchaseAction = onPurchaseAction
-        self.customContent = nil
-        self.customContentInsertionPoint = .afterHeader
-    }
-
-    /// Creates a new `InAppPurchaseView` with custom content inserted at a specific point.
-    /// - Parameters:
-    ///   - includeNavigationStack: A `Bool` indicating whether the purchase view should be contained in
-    ///   its own `NavigationStack`. Defaults to `true`.
-    ///   - includeDismissButton: A `Bool` indicating whether the purchase view should be dismissed from
-    ///   the top toolbar. Defaults to `true`.
-    ///   - onPurchaseAction: An optional action to perform when a transaction is completed. This is separate
-    ///   to the action set in `InAppPurchaseKitConfiguration` but both
-    ///   will be performed. If an action is set, you will need to also dismiss the view. This
-    ///   is handled automatically when no action is set. Defaults to `nil`.
-    ///   - insertionPoint: The position to insert the custom content.
-    ///   Only one insertion point is active at a time.
-    ///   - insertContent: A `ViewBuilder` that creates custom content.
+    ///   - contentOrder: The order that content should be displayed in the purchase view.
+    ///   Defaults to `InAppPurchaseViewContent.defaultOrder`.
     public init(
         includeNavigationStack: Bool = true,
         includeDismissButton: Bool = true,
         onPurchase onPurchaseAction: (@Sendable () -> Void)? = nil,
-        insertContentAt insertionPoint: CustomContentInsertionPoint,
-        @ViewBuilder insertContent: () -> some View
+        contentOrder: [InAppPurchaseViewContent] = InAppPurchaseViewContent.defaultOrder
     ) {
         self.includeNavigationStack = includeNavigationStack
         self.includeDismissButton = includeDismissButton
         self.onPurchaseAction = onPurchaseAction
-        self.customContent = AnyView(insertContent())
-        self.customContentInsertionPoint = insertionPoint
+        self.contentOrder = contentOrder
     }
 
     public var body: some View {
@@ -160,34 +132,8 @@ public struct InAppPurchaseView: View {
     private var subscriptionViewContents: some View {
         ScrollView {
             VStack(spacing: SizingConstants.mainSpacing) {
-                InAppPurchaseHeaderView(
-                    configuration: inAppPurchase.configuration
-                )
-                .frame(maxWidth: .infinity)
-
-                customContentIfInsertionPointMatches(insertionPoint: .afterHeader)
-
-                TiersView(
-                    selectedTier: $selectedTier,
-                    ignorePurchaseState: $ignorePurchaseState
-                )
-
-                customContentIfInsertionPointMatches(insertionPoint: .afterTiers)
-
-                VStack(spacing: SizingConstants.mainSpacing / 2) {
-                    Group {
-                        Divider()
-                        FeaturesView(inAppPurchase.configuration.features)
-                        customContentIfInsertionPointMatches(insertionPoint: .afterFeatures)
-                        Divider()
-                    }
-                    .frame(maxWidth: SizingConstants.mainContentWidth)
-
-                    AdditionalOptionsView(
-                        ignorePurchaseState: $ignorePurchaseState
-                    )
-
-                    customContentIfInsertionPointMatches(insertionPoint: .afterAdditionalOptions)
+                ForEach(contentOrder.indices, id: \.self) { index in
+                    renderView(for: contentOrder[index])
                 }
             }
             .frame(maxWidth: .infinity)
@@ -203,10 +149,36 @@ public struct InAppPurchaseView: View {
     }
 
     @ViewBuilder
-    private func customContentIfInsertionPointMatches(
-        insertionPoint: CustomContentInsertionPoint
-    ) -> some View {
-        if customContentInsertionPoint == insertionPoint, let customContent {
+    private func renderView(for content: InAppPurchaseViewContent) -> some View {
+        switch content {
+        case .header:
+            InAppPurchaseHeaderView(
+                configuration: inAppPurchase.configuration
+            )
+            .frame(maxWidth: .infinity)
+
+        case .tiers:
+            TiersView(
+                selectedTier: $selectedTier,
+                ignorePurchaseState: $ignorePurchaseState
+            )
+
+        case .features:
+            VStack(spacing: SizingConstants.mainSpacing / 2) {
+                Group {
+                    Divider()
+                    FeaturesView(inAppPurchase.configuration.features)
+                    Divider()
+                }
+            }
+            .frame(maxWidth: SizingConstants.mainContentWidth)
+
+        case .additionalOptions:
+            AdditionalOptionsView(
+                ignorePurchaseState: $ignorePurchaseState
+            )
+
+        case .custom(let customContent):
             customContent
         }
     }
@@ -273,18 +245,26 @@ public struct InAppPurchaseView: View {
 #Preview("InAppPurchaseView+CustomContent") {
     let inAppPurchase = InAppPurchaseKit.configure(with: .example)
 
-    InAppPurchaseView(insertContentAt: .afterTiers) {
-            VStack(spacing: 8) {
-                Text("Limited-time discount")
-                    .font(.headline)
-                Text("Save 20% with App Store Code XYZ")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(.thinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
+    InAppPurchaseView(
+        contentOrder: [
+            .header,
+            .custom(AnyView(
+                VStack(spacing: 8) {
+                    Text("Limited-time discount")
+                        .font(.headline)
+                    Text("Save 20% with App Store Code XYZ")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            )),
+            .tiers,
+            .features,
+            .additionalOptions
+        ]
+    )
     .environment(inAppPurchase)
 }
